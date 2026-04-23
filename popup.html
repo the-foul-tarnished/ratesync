@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RateSync - Sync Letterboxd to IMDb</title>
+  <style>
+    @font-face {
+      font-family: 'Nunito';
+      font-style: normal;
+      font-weight: 400 800;
+      font-display: swap;
+      src: url('fonts/nunito.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 400 500;
+      font-display: swap;
+      src: url('fonts/jetbrains-mono.woff2') format('woff2');
+    }
+
+    :root {
+      --bg:      #0a0f1e;
+      --surface: #111827;
+      --border:  #1e2d45;
+      --amber:   #f5a623;
+      --blue:    #38bdf8;
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --text:    #ffffff;
+      --text-2:  #b0bcd4;
+      --text-3:  #6b7fa3;
+
+      --font-sans: 'Nunito', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      font-family: var(--font-sans);
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--amber);
+      line-height: 1;
+    }
+
+    header h1 {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.01em;
+      flex: 1;
+    }
+
+    /* Status pill in header */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 5px 12px;
+      flex-shrink: 0;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .status-pill:has(.dot.warn) {
+      border-color: rgba(245,166,35,0.4);
+      background: rgba(245,166,35,0.06);
+    }
+
+    .status-pill:has(.dot.warn) #statusText { color: var(--amber); }
+
+    .dot {
+      display: none;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.warn {
+      display: block;
+      background: var(--amber);
+      box-shadow: 0 0 8px rgba(245,166,35,0.8);
+    }
+
+    .dot.ok {
+      display: block;
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(34,197,94,0.7);
+    }
+
+    #statusText {
+      font-size: 12px;
+      color: var(--text-2);
+      font-family: var(--font-sans);
+    }
+
+    .login-link {
+      font-size: 12px;
+      color: var(--amber);
+      background: none;
+      border: none;
+      border-left: 1px solid rgba(245,166,35,0.3);
+      padding: 0 0 0 7px;
+      margin-left: 2px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+    }
+
+    .login-link:hover { text-decoration: underline; }
+
+    /* Stats row */
+    .stats-bar {
+      display: none;
+      padding: 8px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      justify-content: space-between;
+    }
+    .stats-bar.visible { display: flex; }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .stat-value {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-sans);
+    }
+
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* TMDb notice bar */
+    .status-wrap {
+      padding: 8px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .tmdb-notice {
+      display: none;
+      font-size: 12px;
+      color: var(--text-3);
+      text-align: center;
+    }
+
+    .tmdb-notice.visible { display: block; }
+
+    /* Log */
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px 4px;
+    }
+
+    .log-label {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+    }
+
+    #totalCount {
+      font-size: 11px;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+    }
+
+    .log-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px 9px 16px;
+      border-left: 2px solid transparent;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+
+    #logList {
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    #logList::-webkit-scrollbar { width: 4px; }
+    #logList::-webkit-scrollbar-track { background: transparent; }
+    #logList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    .log-item:last-child { border-bottom: none; }
+    .log-item:hover { background: var(--surface); }
+    .log-item:has(.log-status.ok) { border-left-color: var(--green); }
+    .log-item:has(.log-status.err) { border-left-color: var(--red); }
+    .log-item.clickable { cursor: pointer; }
+    .log-item.clickable:hover .log-title { color: var(--blue); }
+
+    .log-status { display: none; }
+
+    .log-body {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .log-title {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+
+    .log-error {
+      font-size: 11px;
+      color: var(--red);
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+      opacity: 0.85;
+    }
+
+    .log-meta {
+      font-size: 12px;
+      color: var(--text-3);
+      flex-shrink: 0;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .log-stars { font-size: 17px; letter-spacing: 0.5px; }
+    .star-full  { color: var(--green); }
+    .star-half  {
+      position: relative;
+      display: inline-block;
+      color: rgba(107, 127, 163, 0.4);
+    }
+    .star-half::before {
+      content: '★';
+      position: absolute;
+      left: 0;
+      width: 50%;
+      overflow: hidden;
+      color: var(--green);
+    }
+    .star-empty { color: rgba(107, 127, 163, 0.4); }
+    .log-time   { font-size: 11px; }
+
+    .empty {
+      padding: 28px 18px;
+      text-align: center;
+      color: var(--text-3);
+      font-size: 13px;
+      line-height: 2;
+    }
+
+    .empty-icon {
+      font-size: 24px;
+      margin-bottom: 6px;
+      opacity: 0.3;
+    }
+
+    /* Footer */
+    footer {
+      padding: 10px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .footer-btn {
+      font-size: 12px;
+      color: var(--text-2);
+      background: none;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      padding: 6px 16px;
+      border-radius: 8px;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    #clearBtn:hover { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.06); }
+    #clearBtn.confirm { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.1); }
+    #kofiBtn:hover { color: var(--amber); border-color: var(--amber); background: rgba(245,166,35,0.06); }
+
+    #settingsBtn:hover { color: var(--text); border-color: #555; background: var(--surface); }
+    #settingsBtn.active { color: var(--blue); border-color: var(--blue); }
+
+    /* Blue dot on settings button when TMDb key is missing */
+    #settingsBtn.needs-config::after {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 5px rgba(56,189,248,0.7);
+      margin-left: 6px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+
+    /* Settings panel */
+    .settings-section {
+      display: none;
+      padding: 18px;
+    }
+
+    .settings-section.visible {
+      display: block;
+      animation: fadeSlideIn 0.15s ease;
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .back-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .back-btn:hover {
+      color: var(--text);
+      border-color: #555;
+      background: var(--surface);
+    }
+
+    .settings-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+      font-family: var(--font-sans);
+      letter-spacing: 0.01em;
+    }
+
+    .settings-label {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    .settings-input-wrap {
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .settings-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 9px 36px 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .settings-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+
+    .toggle-visibility {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      padding: 0;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s;
+    }
+    .toggle-visibility:hover { color: var(--text-2); }
+
+    .settings-save {
+      width: 100%;
+      background: var(--blue);
+      color: #0a0f1e;
+      border: none;
+      border-radius: 99px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 9px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .settings-save:hover { opacity: 0.88; }
+
+    .settings-btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .settings-btn-row .settings-save { flex: 1; }
+
+    .settings-remove {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      color: var(--text-3);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 9px 14px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .settings-remove:hover { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.06); }
+
+    .settings-status {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      text-align: center;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
+    .settings-status.ok { color: var(--green); }
+    .settings-status.err { color: var(--red); }
+
+    /* TMDb how-to instructions */
+    .settings-instructions {
+      margin-top: 6px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.7;
+    }
+
+    .settings-instructions strong {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      margin-bottom: 6px;
+    }
+
+    .settings-instructions ol {
+      padding-left: 16px;
+      margin: 0;
+    }
+
+    .settings-instructions li { margin-bottom: 2px; }
+
+    .settings-instructions a {
+      color: var(--blue);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
+    }
+
+    .settings-instructions a:hover { opacity: 0.8; }
+
+    .how-to-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-3);
+      padding: 0;
+      transition: color 0.15s;
+    }
+
+    .how-to-btn:hover { color: var(--blue); }
+
+    /* iOS toggle */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .setting-row-label {
+      font-size: 13px;
+      line-height: 24px;
+      color: var(--text-2);
+      font-family: var(--font-sans);
+    }
+
+    .ios-toggle {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .ios-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .ios-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 99px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .ios-track::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .ios-toggle input:checked + .ios-track { background: var(--blue); }
+    .ios-toggle input:checked + .ios-track::before { transform: translateX(18px); }
+  </style>
+</head>
+<body>
+  <div id="mainView">
+    <header>
+      <div class="logo" aria-hidden="true">&harr;</div>
+      <h1>RateSync</h1>
+      <div class="status-pill" role="status">
+        <div class="dot" id="statusDot" aria-hidden="true"></div>
+        <span id="statusText">Checking...</span>
+        <button class="login-link" id="loginLink" style="display:none" aria-label="Log in to IMDb">Log in &rarr;</button>
+      </div>
+    </header>
+
+    <div class="log-section" id="logSection">
+      <div class="log-header">
+        <span class="log-label">Recent syncs</span>
+        <span id="totalCount"></span>
+      </div>
+      <div id="logList">
+        <div class="empty">
+          <div class="empty-icon" aria-hidden="true">&starf;</div>
+          No syncs yet.<br>Rate a film on Letterboxd.
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+      <div class="stat">
+        <span class="stat-value" id="statTotal">—</span>
+        <span class="stat-label">Synced</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="statSuccess">—</span>
+        <span class="stat-label">Success</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="statAvg">—</span>
+        <span class="stat-label">Avg Rating</span>
+      </div>
+    </div>
+
+    <div class="status-wrap" id="tmdbWrap">
+      <div class="tmdb-notice" id="tmdbNotice">
+        Add a TMDb API key in Settings for more reliable syncing.
+      </div>
+    </div>
+
+    <footer>
+      <button class="footer-btn" id="clearBtn">Clear</button>
+      <button class="footer-btn" id="kofiBtn">☕ Support</button>
+      <button class="footer-btn" id="settingsBtn">Settings</button>
+    </footer>
+  </div>
+
+  <div class="settings-section" id="settingsSection" aria-label="Settings">
+    <div class="settings-header">
+      <button class="back-btn" id="backBtn" aria-label="Back to sync log">&larr;</button>
+      <span class="settings-title">Settings</span>
+    </div>
+    <div class="setting-row" style="margin-top:0; border-top:none;">
+      <span class="setting-row-label">Show failed syncs only</span>
+      <label class="ios-toggle" aria-label="Show failed syncs only">
+        <input type="checkbox" id="failedOnlyToggle" />
+        <span class="ios-track"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-row-label">Show unique films only</span>
+      <label class="ios-toggle" aria-label="Show unique films only">
+        <input type="checkbox" id="uniqueOnlyToggle" />
+        <span class="ios-track"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-row-label">Auto-open IMDb page after sync</span>
+      <label class="ios-toggle" aria-label="Auto-open IMDb page after sync">
+        <input type="checkbox" id="autoOpenToggle" />
+        <span class="ios-track"></span>
+      </label>
+    </div>
+
+    <div style="border-top: 1px solid var(--border); margin: 14px 0 14px;"></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div class="settings-label" style="margin-bottom:0;">TMDb Access Token</div>
+      <button class="how-to-btn" id="tmdbHowToBtn">How to get one? ▸</button>
+    </div>
+    <div class="settings-input-wrap">
+      <input class="settings-input" id="tmdbKeyInput" type="password" placeholder="Paste your v4 Read Access Token..." aria-label="TMDb API Key" />
+      <button class="toggle-visibility" id="toggleVisibility" aria-label="Show API key">
+        <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+    </div>
+    <div class="settings-btn-row">
+      <button class="settings-save" id="saveKeyBtn">Save</button>
+      <button class="settings-remove" id="removeKeyBtn" style="display:none">Remove</button>
+    </div>
+    <div class="settings-status" id="saveStatus" role="status"></div>
+
+    <div class="settings-instructions" id="tmdbInstructions" style="display:none">
+      <ol>
+        <li>Create a free account at <a href="https://www.themoviedb.org" id="tmdbHomeLink" target="_blank">themoviedb.org</a> if you don't have one, then log in</li>
+        <li>Go to <a href="https://www.themoviedb.org/settings/api" id="tmdbApiLink" target="_blank">themoviedb.org/settings/api</a></li>
+        <li>Click <em>Request an API Key</em> &rarr; select <em>Personal Use</em> &rarr; fill in the form</li>
+        <li>Copy the <em>API Read Access Token (v4 auth)</em> — the long one — and paste it above</li>
+      </ol>
+      <p style="margin-top:8px; font-size:11px; color:var(--text-3);">🔒 Your key is stored locally and only sent to TMDb to look up film IDs.</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
