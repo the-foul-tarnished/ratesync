@@ -1,15 +1,21 @@
 {
   "manifest_version": 3,
   "name": "RateSync - Sync Letterboxd Rating to IMDb",
-  "version": "1.5.0",
+  "version": "2.0.0",
+  "minimum_chrome_version": "111",
   "description": "Syncs your Letterboxd rating to IMDb automatically each time you rate a film on Letterboxd.",
   "permissions": [
+    "alarms",
     "cookies",
     "storage",
-    "webRequest"
+    "webRequest",
+    "scripting"
   ],
   "host_permissions": [
     "https://letterboxd.com/*",
+    "https://www.letterboxd.com/*",
+    "https://boxd.it/*",
+    "https://api.letterboxd.com/*",
     "https://*.imdb.com/*",
     "https://api.themoviedb.org/*"
   ],
@@ -25,6 +31,21 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://letterboxd.com/*", "https://www.letterboxd.com/*"],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://letterboxd.com/*", "https://www.letterboxd.com/*"],
+      "js": ["page-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "RateSync - Sync Letterboxd Rating to IMDb",

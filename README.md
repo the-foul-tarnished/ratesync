@@ -10,11 +10,12 @@ RateSync is a Chrome extension that submits your Letterboxd rating to IMDb the m
 
 ## How It Works
 
-1. You rate a film on Letterboxd (film page or log/diary dialog)
-2. RateSync detects the rating in the background
-3. It resolves the film's IMDb ID via Letterboxd's film data (with TMDb as fallback)
-4. It submits the equivalent rating to IMDb using your existing session
-5. The sync is logged in the popup — green for success, red for failure
+1. You rate a film — on the film page's star widget, or from the log/diary dialog
+2. RateSync catches the rating request as it leaves your browser
+3. It resolves the film's IMDb ID from Letterboxd's own film data, falling back to TMDb when Letterboxd doesn't link to IMDb
+4. It submits the equivalent rating to IMDb using your existing logged-in session
+5. A toast on the Letterboxd page confirms each step — *IMDb sync initiated*, then *IMDb rating synced* (or the exact reason it failed)
+6. If a sync fails for a transient reason it is retried once automatically, 5 seconds later; anything that still fails can be retried by hand from the popup
 
 Letterboxd's 5-star scale is converted to IMDb's 10-point scale automatically.
 
@@ -24,12 +25,31 @@ Letterboxd's 5-star scale is converted to IMDb's 10-point scale automatically.
 
 - Automatic background sync — no interaction needed
 - Works from both the film page and the log/diary dialog
+- On-page status toasts — confirmation when your rating is captured, then the result (or the exact failure reason, with a retry hint)
+- One automatic retry after 5 seconds before anything is reported as failed
 - Sync log with film title, star rating, and timestamp
+- Inline retry button on any failed sync
 - Stats bar — total synced, success rate, average rating
 - Filter by failed syncs or unique films only
-- Auto-open IMDb page after each sync (optional)
-- TMDb fallback for films without a direct IMDb link on Letterboxd
+- TMDb fallback for films without a direct IMDb link on Letterboxd (v4 token *or* v3 API key)
+- Optional: open the IMDb page after a sync (only ever after IMDb confirms it)
+- In-page notifications can be turned off in Settings
 - IMDb login status indicator in the header
+
+---
+
+## Good To Know
+
+**Why does an IMDb tab appear for a second?**
+IMDb only accepts ratings from a request made by a real IMDb page — calls from the extension's own background code are rejected with a 403. So RateSync opens an IMDb tab just long enough to send the rating, never switches to it, and closes it immediately afterwards. It only ever comes to the front if you turn on *Auto-open IMDb* **and** the sync succeeded — and once shown, that tab is yours: RateSync never reuses or closes it, and opens a new one for the next rating.
+
+**Your IMDb rating is always overwritten.**
+Every rating you give on Letterboxd replaces the one on IMDb, and there is no undo. *Retry* on an old failed sync is the one exception: it's refused (and the button hidden) if you've rated the film successfully since, so it can never resend a stale value over a newer one.
+
+**Un-rating isn't synced.**
+Removing a rating on Letterboxd does not remove it on IMDb — a known limitation. Syncs only go one way.
+
+**You must be logged into IMDb** in the same browser profile; RateSync never sees or stores your password.
 
 ---
 
@@ -46,7 +66,7 @@ Letterboxd's 5-star scale is converted to IMDb's 10-point scale automatically.
 - Google Chrome
 - A [Letterboxd](https://letterboxd.com) account
 - An [IMDb](https://www.imdb.com) account — must be logged in on the same browser profile
-- A [TMDb API Read Access Token](https://www.themoviedb.org/settings/api) (free) — only needed as fallback for films Letterboxd doesn't directly link to IMDb
+- *(Optional)* A [TMDb API key](https://www.themoviedb.org/settings/api) (free) — only needed as a fallback for films Letterboxd doesn't directly link to IMDb. Either a v4 Read Access Token or a 32-character v3 API key works.
 
 ---
 
@@ -63,14 +83,24 @@ _(Coming soon)_
 3. Enable **Developer mode**
 4. Click **Load unpacked** and select the `ratesync/` folder
 
+After changing any code, click **⟳ reload** on the RateSync card — and reload any Letterboxd tabs that are already open, so they pick up the page-side scripts.
+
 ---
 
 ## Setup
 
 1. Log in to [IMDb](https://www.imdb.com) in your browser — the extension uses your existing session
-2. Click the RateSync icon and open **Settings**
-3. Paste your [TMDb API Read Access Token](https://www.themoviedb.org/settings/api) (free — select _Personal Use_ when applying)
-4. Rate a film on Letterboxd — the sync happens automatically
+2. *(Optional)* Click the RateSync icon → **Settings** and paste your [TMDb API key](https://www.themoviedb.org/settings/api) (free — select _Personal Use_ when applying)
+3. Rate a film on Letterboxd — the sync happens automatically
+
+---
+
+## For Developers
+
+There is **no build step**: plain HTML/CSS/ES6+, loaded straight into Chrome. Request interception, the page-side rating hook, the resolution pipeline, IMDb submission, and the storage schema are all in `background.js`, `page-hook.js`, and `page-bridge.js` — see the header comments there for how the pieces fit together.
+
+- **Tests:** `node --test "tests/*.test.js"` — no dependencies; runs `background.js` against a stubbed `chrome` API.
+- **Store package:** `python scripts/pack.py` — zips only the files the manifest and popup reference, so `tests/` and `scripts/` never ship.
 
 ---
 
@@ -79,13 +109,16 @@ _(Coming soon)_
 - Runs entirely in your browser — no external servers, no analytics, no tracking
 - Your TMDb token is stored locally and only sent to TMDb for film ID lookups
 - Your IMDb session is used only to submit your rating — never stored or shared
-- Full privacy policy: [privacy-policy.md](.claude/privacy-policy.md)
+- Letterboxd sign-in and account forms are ignored entirely
+- Full privacy policy: [PRIVACY_POLICY.md](PRIVACY_POLICY.md)
 
 ---
 
 ## Disclaimer
 
-This extension is not affiliated with Letterbox or IMDb. Use it at your own risk
+RateSync is an independent project and is not affiliated with, endorsed by, or sponsored by Letterboxd or IMDb. Letterboxd and IMDb are trademarks of their respective owners. It uses IMDb's website interface rather than an official public API. Use it at your own risk.
+
+RateSync relies on IMDb and Letterboxd interfaces and may stop working if either changes its code. If that happens, please leave a review on the Chrome Web Store so I can update it.
 
 ## License
 

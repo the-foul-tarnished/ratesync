@@ -18,5 +18,11 @@ package.json
 package-lock.json
 
 # Dev files
-CLAUDE.md
+AGENTS.md
+agents.md
 logo/logo.png
+logo.png
+docs/
+
+# Extension build packages
+*.zip
